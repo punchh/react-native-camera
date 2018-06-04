@@ -49,6 +49,15 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
     // reader instance for the barcode scanner
     private final MultiFormatReader _multiFormatReader = new MultiFormatReader();
 
+    private static Camera.Parameters getCameraParameters(Camera camera) {
+        try {
+            return camera != null ? camera.getParameters() : null;
+        } catch (RuntimeException e) {
+            // The camera has been released
+            return null;
+        }
+    }
+
     public RCTCameraViewFinder(Context context, int type) {
         super(context);
         this.setSurfaceTextureListener(this);
@@ -137,7 +146,7 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
             _isStarting = true;
             try {
                 _camera = RCTCamera.getInstance().acquireCameraInstance(_cameraType);
-                Camera.Parameters parameters = _camera.getParameters();
+                Camera.Parameters parameters = getCameraParameters(_camera);
 
                 final boolean isCaptureModeStill = (_captureMode == RCTCameraModule.RCT_CAMERA_CAPTURE_MODE_STILL);
                 final boolean isCaptureModeVideo = (_captureMode == RCTCameraModule.RCT_CAMERA_CAPTURE_MODE_VIDEO);
@@ -306,26 +315,44 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
                 return null;
             }
 
-            Camera.Size size = camera.getParameters().getPreviewSize();
+            Camera.Parameters parameters = getCameraParameters(camera);
+            if (parameters == null) {
+                // The camera was released after onPreviewFrame() was called
+                // but before this async task actually ran
+                return null;
+            }
 
+            Camera.Size size = parameters.getPreviewSize();
+
+            int x = 0;
+            int y = 0;
             int width = size.width;
             int height = size.height;
 
-            // rotate for zxing if orientation is portrait
-            if (RCTCamera.getInstance().getActualDeviceOrientation() == 0) {
-                byte[] rotated = new byte[imageData.length];
-                for (int y = 0; y < height; y++) {
-                    for (int x = 0; x < width; x++) {
-                        rotated[x * height + height - y - 1] = imageData[x + y * width];
-                    }
-                }
-                width = size.height;
-                height = size.width;
-                imageData = rotated;
-            }
-
             try {
-                PlanarYUVLuminanceSource source = new PlanarYUVLuminanceSource(imageData, width, height, 0, 0, width, height, false);
+                // If using a barcode finder, limit the search area
+                if ( RCTCamera.getInstance().barcodeFinderVisible() ){
+                    x = (width/2) - ((int)RCTCamera.getInstance().barcodeFinderWidth()/2);
+                    y = (height/2) - ((int)RCTCamera.getInstance().barcodeFinderHeight()/2);
+                    width = (int)RCTCamera.getInstance().barcodeFinderWidth();
+                    height = (int)RCTCamera.getInstance().barcodeFinderHeight();
+                }
+
+                // rotate for zxing if orientation is portrait
+                if (RCTCamera.getInstance().getActualDeviceOrientation() == 0) {
+                    byte[] rotated = new byte[imageData.length];
+                    for (int ypos = y; ypos < height; ypos++) {
+                        for (int xpos = x; xpos < width; xpos++) {
+                            rotated[xpos * height + height - ypos - 1] = imageData[xpos + ypos * width];
+                        }
+                    }
+                    int tmp = width;
+                    width = height;
+                    height = tmp;
+                    imageData = rotated;
+                }
+
+                PlanarYUVLuminanceSource source = new PlanarYUVLuminanceSource(imageData, width, height, x, y, width, height, false);
                 BinaryBitmap bitmap = new BinaryBitmap(new HybridBinarizer(source));
                 Result result = _multiFormatReader.decodeWithState(bitmap);
 
@@ -359,26 +386,32 @@ class RCTCameraViewFinder extends TextureView implements TextureView.SurfaceText
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
-        // Get the pointer ID
-        Camera.Parameters params = _camera.getParameters();
-        int action = event.getAction();
+      // Get the pointer ID
+      if (_camera == null) {
+          return false;
+      }
 
+      Camera.Parameters params = getCameraParameters(_camera);
+      if (params != null) {
+          // Get the pointer ID
+          int action = event.getAction();
 
-        if (event.getPointerCount() > 1) {
-            // handle multi-touch events
-            if (action == MotionEvent.ACTION_POINTER_DOWN) {
-                mFingerSpacing = getFingerSpacing(event);
-            } else if (action == MotionEvent.ACTION_MOVE && params.isZoomSupported()) {
-                _camera.cancelAutoFocus();
-                handleZoom(event, params);
-            }
-        } else {
-            // handle single touch events
-            if (action == MotionEvent.ACTION_UP) {
-                handleFocus(event, params);
-            }
-        }
-        return true;
+          if (event.getPointerCount() > 1) {
+              // handle multi-touch events
+              if (action == MotionEvent.ACTION_POINTER_DOWN) {
+                  mFingerSpacing = getFingerSpacing(event);
+              } else if (action == MotionEvent.ACTION_MOVE && params.isZoomSupported()) {
+                  _camera.cancelAutoFocus();
+                  handleZoom(event, params);
+              }
+          } else {
+              // handle single touch events
+              if (action == MotionEvent.ACTION_UP) {
+                  handleFocus(event, params);
+              }
+          }
+      }
+      return true;
     }
 
     private void handleZoom(MotionEvent event, Camera.Parameters params) {
