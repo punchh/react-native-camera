@@ -1,24 +1,25 @@
 package org.reactnative.frame;
 
+import com.google.mlkit.vision.common.InputImage;
+
 import org.reactnative.camera.utils.ImageDimensions;
-import com.google.android.gms.vision.Frame;
 
 /**
  * Wrapper around Frame allowing us to track Frame dimensions.
- * Tracking dimensions is used in RNFaceDetector and RNBarcodeDetector to provide painless FaceDetector/BarcodeDetector recreation
+ * Tracking dimensions is used in RNBarcodeDetector to provide painless BarcodeDetector recreation
  * when image dimensions change.
  */
 
 public class RNFrame {
-  private Frame mFrame;
+  private InputImage mFrame;
   private ImageDimensions mDimensions;
 
-  public RNFrame(Frame frame, ImageDimensions dimensions) {
+  public RNFrame(InputImage frame, ImageDimensions dimensions) {
     mFrame = frame;
     mDimensions = dimensions;
   }
 
-  public Frame getFrame() {
+  public InputImage getInputImage() {
     return mFrame;
   }
 
