@@ -1,46 +1,42 @@
 package org.reactnative.barcodedetector;
 
-import android.content.Context;
-import android.util.SparseArray;
-import com.google.android.gms.vision.barcode.Barcode;
-import com.google.android.gms.vision.barcode.BarcodeDetector;
+import com.google.android.gms.tasks.Task;
+import com.google.mlkit.vision.barcode.BarcodeScanner;
+import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
+import com.google.mlkit.vision.barcode.BarcodeScanning;
+import com.google.mlkit.vision.barcode.common.Barcode;
+
 import org.reactnative.camera.utils.ImageDimensions;
 import org.reactnative.frame.RNFrame;
+
+import java.util.List;
 
 public class RNBarcodeDetector {
 
     public static int NORMAL_MODE = 0;
     public static int ALTERNATE_MODE = 1;
     public static int INVERTED_MODE = 2;
-    public static int ALL_FORMATS = Barcode.ALL_FORMATS;
+    public static int ALL_FORMATS = Barcode.FORMAT_ALL_FORMATS;
 
-    private BarcodeDetector mBarcodeDetector = null;
+    private BarcodeScanner mBarcodeDetector = null;
     private ImageDimensions mPreviousDimensions;
-    private BarcodeDetector.Builder mBuilder;
+    private BarcodeScannerOptions.Builder mBuilder;
 
-    private int mBarcodeType = Barcode.ALL_FORMATS;
+    private int mBarcodeType = Barcode.FORMAT_ALL_FORMATS;
 
-    public RNBarcodeDetector(Context context) {
-        mBuilder = new BarcodeDetector.Builder(context)
+    public RNBarcodeDetector() {
+        mBuilder = new  BarcodeScannerOptions.Builder()
                 .setBarcodeFormats(mBarcodeType);
     }
 
-    // Public API
 
-    public boolean isOperational() {
-        if (mBarcodeDetector == null) {
-            createBarcodeDetector();
-        }
 
-        return mBarcodeDetector.isOperational();
-    }
-
-    public SparseArray<Barcode> detect(RNFrame frame) {
+    public Task<List<Barcode>> detect(RNFrame frame) {
         // If the frame has different dimensions, create another barcode detector.
         // Otherwise we will most likely get nasty "inconsistent image dimensions" error from detector
         // and no barcode will be detected.
         if (!frame.getDimensions().equals(mPreviousDimensions)) {
-            releaseBarcodeDetector();
+            release();
         }
 
         if (mBarcodeDetector == null) {
@@ -48,7 +44,7 @@ public class RNBarcodeDetector {
             mPreviousDimensions = frame.getDimensions();
         }
 
-        return mBarcodeDetector.detect(frame.getFrame());
+        return mBarcodeDetector.process(frame.getInputImage());
     }
 
     public void setBarcodeType(int barcodeType) {
@@ -61,20 +57,17 @@ public class RNBarcodeDetector {
 
 
     public void release() {
-        releaseBarcodeDetector();
-        mPreviousDimensions = null;
-    }
-
-    // Lifecycle methods
-
-    private void releaseBarcodeDetector() {
         if (mBarcodeDetector != null) {
-            mBarcodeDetector.release();
+            try {
+                mBarcodeDetector.close();
+            } catch (Exception e) {
+            }
             mBarcodeDetector = null;
         }
     }
 
+
     private void createBarcodeDetector() {
-        mBarcodeDetector = mBuilder.build();
+        mBarcodeDetector =  BarcodeScanning.getClient(mBuilder.build());
     }
 }
