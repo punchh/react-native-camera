@@ -8,11 +8,12 @@ import com.facebook.react.bridge.ReadableMap;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
 import com.google.android.cameraview.CameraView;
-import com.google.mlkit.vision.text.Text;
+import com.google.android.gms.tasks.Task;
 import com.google.mlkit.vision.text.Text.Line;
+import com.google.mlkit.vision.text.Text;
 import com.google.mlkit.vision.text.Text.TextBlock;
-import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.TextRecognition;
+import com.google.mlkit.vision.text.TextRecognizer;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
 
 import org.reactnative.camera.utils.ImageDimensions;
@@ -20,10 +21,8 @@ import org.reactnative.facedetector.FaceDetectorUtils;
 import org.reactnative.frame.RNFrame;
 import org.reactnative.frame.RNFrameFactory;
 
-import java.util.List;
 
-
-public class TextRecognizerAsyncTask extends android.os.AsyncTask<Void, Void, List<Text.TextBlock>>  {
+public class TextRecognizerAsyncTask extends android.os.AsyncTask<Void, Void, Task<Text>> {
 
   private TextRecognizerAsyncTaskDelegate mDelegate;
   private TextRecognizer mTextRecognizer;
@@ -63,32 +62,39 @@ public class TextRecognizerAsyncTask extends android.os.AsyncTask<Void, Void, Li
   }
 
   @Override
-  protected List<TextBlock> doInBackground(Void... ignored) {
+  protected Task<Text> doInBackground(Void... ignored) {
     if (isCancelled() || mDelegate == null) {
       return null;
     }
     mTextRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
     RNFrame frame = RNFrameFactory.buildFrame(mImageData, mWidth, mHeight, mRotation);
-    return mTextRecognizer.process(frame.getInputImage()).getResult().getTextBlocks();
+    return mTextRecognizer.process(frame.getInputImage());
   }
 
   @Override
-  protected void onPostExecute(List<TextBlock> textBlocks) {
-    super.onPostExecute(textBlocks);
+  protected void onPostExecute(Task<Text> task) {
+    super.onPostExecute(task);
     if (mTextRecognizer != null) {
       mTextRecognizer.close();
     }
-    if (textBlocks != null) {
-      WritableArray textBlocksList = Arguments.createArray();
-      for (int i = 0; i < textBlocks.size(); ++i) {
-        TextBlock textBlock = textBlocks.get(i);
-        WritableMap serializedTextBlock = serializeText(textBlock);
-        if (mImageDimensions.getFacing() == CameraView.FACING_FRONT) {
-          serializedTextBlock = rotateTextX(serializedTextBlock);
+    if (task != null) {
+      task.addOnSuccessListener(text -> {
+        if (text != null) {
+          WritableArray textBlocksList = Arguments.createArray();
+          for (int i = 0; i < text.getTextBlocks().size(); ++i) {
+            TextBlock textBlock = text.getTextBlocks().get(i);
+            WritableMap serializedTextBlock = serializeText(textBlock);
+            if (mImageDimensions.getFacing() == CameraView.FACING_FRONT) {
+              serializedTextBlock = rotateTextX(serializedTextBlock);
+            }
+            textBlocksList.pushMap(serializedTextBlock);
+          }
+          mDelegate.onTextRecognized(textBlocksList);
         }
-        textBlocksList.pushMap(serializedTextBlock);
-      }
-      mDelegate.onTextRecognized(textBlocksList);
+      }).addOnFailureListener(e -> {
+        mDelegate.onTextRecognizerTaskCompleted();
+      });
+
     }
     mDelegate.onTextRecognizerTaskCompleted();
   }
@@ -154,7 +160,7 @@ public class TextRecognizerAsyncTask extends android.os.AsyncTask<Void, Void, Li
     int height = boundingBox.height();
     if (x < mWidth / 2) {
       x = x + mPaddingLeft / 2;
-    } else if (x > mWidth /2) {
+    } else if (x > mWidth / 2) {
       x = x - mPaddingLeft / 2;
     }
 
@@ -176,7 +182,7 @@ public class TextRecognizerAsyncTask extends android.os.AsyncTask<Void, Void, Li
     bounds.putMap("origin", origin);
     bounds.putMap("size", size);
 
-    return  bounds;
+    return bounds;
   }
 
   private WritableMap rotateTextX(WritableMap text) {
