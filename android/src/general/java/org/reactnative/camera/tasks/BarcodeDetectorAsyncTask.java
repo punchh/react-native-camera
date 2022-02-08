@@ -1,27 +1,21 @@
 package org.reactnative.camera.tasks;
 
 import android.graphics.Rect;
-import android.util.SparseArray;
-
-import androidx.annotation.NonNull;
 
 import com.facebook.react.bridge.Arguments;
 import com.facebook.react.bridge.WritableArray;
 import com.facebook.react.bridge.WritableMap;
-import com.google.android.gms.tasks.OnFailureListener;
-import com.google.android.gms.tasks.OnSuccessListener;
-import com.google.android.gms.tasks.Task;
+import com.google.mlkit.vision.barcode.BarcodeScanner;
 import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.common.InputImage;
 
 import org.reactnative.barcodedetector.BarcodeFormatUtils;
 import org.reactnative.camera.utils.ImageDimensions;
-import org.reactnative.frame.RNFrame;
-import org.reactnative.frame.RNFrameFactory;
 import org.reactnative.barcodedetector.RNBarcodeDetector;
 
 import java.util.List;
 
-public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, 	Task<List<Barcode>>> {
+public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, Void> {
 
   private byte[] mImageData;
   private int mWidth;
@@ -62,38 +56,20 @@ public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, 	
   }
 
   @Override
-  protected Task<List<Barcode>> doInBackground(Void... ignored) {
+  protected Void doInBackground(Void... ignored) {
     if (isCancelled() || mDelegate == null || mBarcodeDetector == null) {
       return null;
     }
-
-    RNFrame frame = RNFrameFactory.buildFrame(mImageData, mWidth, mHeight, mRotation);
-    return mBarcodeDetector.detect(frame);
-  }
-
-  @Override
-  protected void onPostExecute(Task<List<Barcode>> barcodes) {
-    super.onPostExecute(barcodes);
-
-    if (barcodes == null) {
+    InputImage image = InputImage.fromByteArray(mImageData, mWidth, mHeight, BarcodeFormatUtils.getFirebaseRotation(mRotation), InputImage.IMAGE_FORMAT_YV12);
+    BarcodeScanner barcode = mBarcodeDetector.getDetector();
+    barcode.process(image).addOnSuccessListener(barcodes -> {
+      WritableArray serializedBarcodes = serializeEventData(barcodes);
+      mDelegate.onBarcodesDetected(serializedBarcodes, mWidth, mHeight, mImageData);
+      mDelegate.onBarcodeDetectingTaskCompleted();
+    }).addOnFailureListener(e -> {
       mDelegate.onBarcodeDetectionError(mBarcodeDetector);
-    } else {
-      barcodes.addOnSuccessListener(barcodesData -> {
-        // Process scanned information here
-        if (barcodesData.size() > 0) {
-          mDelegate.onBarcodesDetected(serializeEventData(barcodesData), mWidth, mHeight, mImageData);
-        }
-        mDelegate.onBarcodeDetectingTaskCompleted();
-      })
-              .addOnFailureListener(new OnFailureListener() {
-                @Override
-                public void onFailure(@NonNull Exception e) {
-                  // Process failed
-                  mDelegate.onBarcodeDetectionError(mBarcodeDetector);
-                }
-              });
-
-    }
+    });
+    return null;
   }
 
   private WritableArray serializeEventData(List<Barcode> barcodes) {
@@ -142,4 +118,7 @@ public class BarcodeDetectorAsyncTask extends android.os.AsyncTask<Void, Void, 	
     bounds.putMap("size", size);
     return bounds;
   }
+
+
+
 }
