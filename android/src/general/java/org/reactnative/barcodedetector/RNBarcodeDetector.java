@@ -1,15 +1,12 @@
 package org.reactnative.barcodedetector;
 
-import com.google.android.gms.tasks.Task;
 import com.google.mlkit.vision.barcode.BarcodeScanner;
 import com.google.mlkit.vision.barcode.BarcodeScannerOptions;
 import com.google.mlkit.vision.barcode.BarcodeScanning;
 import com.google.mlkit.vision.barcode.common.Barcode;
 
 import org.reactnative.camera.utils.ImageDimensions;
-import org.reactnative.frame.RNFrame;
 
-import java.util.List;
 
 public class RNBarcodeDetector {
 
@@ -19,33 +16,22 @@ public class RNBarcodeDetector {
     public static int ALL_FORMATS = Barcode.FORMAT_ALL_FORMATS;
 
     private BarcodeScanner mBarcodeDetector = null;
-    private ImageDimensions mPreviousDimensions;
     private BarcodeScannerOptions.Builder mBuilder;
 
     private int mBarcodeType = Barcode.FORMAT_ALL_FORMATS;
 
     public RNBarcodeDetector() {
-        mBuilder = new  BarcodeScannerOptions.Builder()
-                .setBarcodeFormats(mBarcodeType);
+        mBuilder = new BarcodeScannerOptions.Builder().setBarcodeFormats(mBarcodeType);
     }
 
 
-
-    public Task<List<Barcode>> detect(RNFrame frame) {
-        // If the frame has different dimensions, create another barcode detector.
-        // Otherwise we will most likely get nasty "inconsistent image dimensions" error from detector
-        // and no barcode will be detected.
-        if (!frame.getDimensions().equals(mPreviousDimensions)) {
-            release();
-        }
-
+    public BarcodeScanner getDetector() {
         if (mBarcodeDetector == null) {
             createBarcodeDetector();
-            mPreviousDimensions = frame.getDimensions();
         }
-
-        return mBarcodeDetector.process(frame.getInputImage());
+        return mBarcodeDetector;
     }
+
 
     public void setBarcodeType(int barcodeType) {
         if (barcodeType != mBarcodeType) {
@@ -54,7 +40,6 @@ public class RNBarcodeDetector {
             mBarcodeType = barcodeType;
         }
     }
-
 
     public void release() {
         if (mBarcodeDetector != null) {
@@ -68,6 +53,6 @@ public class RNBarcodeDetector {
 
 
     private void createBarcodeDetector() {
-        mBarcodeDetector =  BarcodeScanning.getClient(mBuilder.build());
+        mBarcodeDetector = BarcodeScanning.getClient(mBuilder.build());
     }
 }
