@@ -68,4 +68,26 @@ public class BarcodeFormatUtils {
 
     return UNKNOWN_FORMAT_INT;
   }
+
+  public static int getFirebaseRotation(int mRotation){
+    int result;
+    switch (mRotation) {
+      case 0:
+        result = 0;
+        break;
+      case 90:
+        result = 90;
+        break;
+      case 180:
+        result = 180;
+        break;
+      case -90:
+      case 270:
+        result = 270;
+        break;
+      default:
+        result = 0;
+    }
+    return result;
+  }
 }
